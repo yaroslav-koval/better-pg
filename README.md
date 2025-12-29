@@ -7,7 +7,7 @@ Sometimes a tuning is about a pure optimization, but sometimes about compromises
 This repository is planned more like _personal_ hints of hidden Postgres corners,
 but it's open to critic and improvements.
 
-## List of useful resources
+## Useful resources
 
 | Name                                                                                                                     | Description                                                                                                                                            |
 |--------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -15,7 +15,7 @@ but it's open to critic and improvements.
 | [Postgres internals](https://www.interdb.jp/pg/index.html#the-internals-of-postgresql)                                   | Explanation of Postgres internals from an enthusiast [Hironobu Suzuki](https://github.com/s-hironobu).                                                 |
 | [Udemy PostgreSQL High Performance Tuning Guide](https://www.udemy.com/course/postgresql-high-performance-tuning-guide/) | May be hard to learn, but very useful course related to Postgres turing using all the DB aspects. [Author](https://www.udemy.com/user/lucian-oprea-2/) |
 
-## Main topics for increasing performance of Postgres instance
+## Topics
 
 * [Indexes](#indexes)
 * [SARGable queries](#sargable-queries)
@@ -27,6 +27,22 @@ but it's open to critic and improvements.
 * [Scalability](#scalability)
 * [Data distribution](#data-distribution-or-sharding)
 * [Modern observability](#modern-observability)
+
+## Architecture overview
+
+Postgres architecture can be split into 2 parts: processes and memory.
+
+Process architecture:
+![process architecture](assets/pg-process-architecture.png)
+
+Details here - https://www.interdb.jp/pg/pgsql02/01.html
+
+Memory architecture:
+![memory architecture](assets/pg-memory-architecture.png)
+
+Details here - https://www.interdb.jp/pg/pgsql02/02.html
+
+Each component can be tuned accordingly to system requirements.
 
 ## Indexes
 
