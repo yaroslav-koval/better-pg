@@ -1,12 +1,12 @@
 # Indexes
 
 <!-- TOC -->
-
 * [Indexes](#indexes)
-    * [Tuning](#tuning)
-    * [Concept](#concept)
-        * [Indexes accelerate reads but add write costs:](#indexes-accelerate-reads-but-add-write-costs)
-
+  * [Tuning](#tuning)
+  * [Concept](#concept)
+  * [Index types](#index-types)
+    * [B-tree (default, most common).](#b-tree-default-most-common)
+    * [HASH](#hash)
 <!-- TOC -->
 
 ## Tuning
@@ -37,6 +37,8 @@ the table rows.
 
 ### B-tree (default, most common).
 
+Name stands for: multi-way balanced tree.
+
 Best for: equality and ordering
 
 * `=`, `<`, `<=`, `>`, `>=`
@@ -58,6 +60,7 @@ and we have the next index:\
 `CREATE INDEX my_table_idx on my_table(col1, col2, col3);`
 
 Then next queries can use index:
+
 ```sql
 SELECT FROM my_table WHERE col1 < 5;
 SELECT FROM my_table WHERE col1 < 5 AND col2 > 10;
@@ -65,8 +68,21 @@ SELECT FROM my_table WHERE col1 < 5 AND col2 > 10 AND col3 <= 25;
 ```
 
 But these queries can **not**:
+
 ```sql
 SELECT FROM my_table WHERE col2 < 10;
 SELECT FROM my_table WHERE col3 <= 25;
 SELECT FROM my_table WHERE col2 < 10 AND col3 <= 25;
 ```
+
+### HASH
+
+Implementation of the [hash table](https://en.wikipedia.org/wiki/Hash_table) data structure.
+
+Works only with `=` operator.
+
+* Historically less preferred.
+* [WAL-logged](https://www.postgresql.org/about/featurematrix/detail/wal-support-for-hash-indexes/) -> crash tolerant.
+* **B-tree** usually performs **similarly** for equality while also supporting more operators.
+
+Use only when measured a real performance improvement.
