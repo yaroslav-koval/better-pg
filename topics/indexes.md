@@ -1,19 +1,30 @@
 # Indexes
 
 <!-- TOC -->
-
 * [Indexes](#indexes)
-    * [Tuning](#tuning)
-    * [Concept](#concept)
-    * [Index types](#index-types)
-        * [B-tree (default, most common).](#b-tree-default-most-common)
-        * [HASH](#hash)
-
+  * [Tuning](#tuning)
+    * [Partial indexes (WHERE)](#partial-indexes-where)
+    * [Covering indexes (INCLUDE)](#covering-indexes-include)
+  * [Concept](#concept)
+  * [Index types](#index-types)
+    * [B-tree (default, most common).](#b-tree-default-most-common)
+    * [HASH](#hash)
+    * [GIN (Generalized Inverted Index)](#gin-generalized-inverted-index)
+    * [BRIN (Block Range Index)](#brin-block-range-index)
+    * [GiST (Generalized Search Tree)](#gist-generalized-search-tree)
+    * [SP-GiST (Space-Partitioned GiST)](#sp-gist-space-partitioned-gist)
 <!-- TOC -->
 
 ## Tuning
 
-1. TODO
+### Partial indexes (WHERE)
+
+```sql
+CREATE INDEX ON orders (created_at)
+  WHERE status = 'open';
+```
+
+### Covering indexes (INCLUDE)
 
 ## Concept
 
@@ -43,10 +54,10 @@ Name stands for: multi-way balanced tree.
 
 **Best for**: equality and ordering
 
-* `=`, `<`, `<=`, `>`, `>=`
-* `BETWEEN`
-* `ORDER BY`
-* Prefix pattern matching with LIKE 'abc%'
+* `=`, `<`, `<=`, `>`, `>=`.
+* `BETWEEN`.
+* `ORDER BY`.
+* Prefix pattern matching with LIKE 'abc%'.
 
 Typical fields: integers, timestamps, UUIDs, numeric, short text.
 
@@ -93,10 +104,36 @@ Use only when measured a real performance improvement.
 
 **Best for**: “contains” style queries where a row contains many tokens/elements.
 
-* `jsonb` (`@>`, `<@`, `?`, `?|`, `?&`). [Details here](https://www.postgresql.org/docs/9.4/functions-json.html)
-* arrays (`@>`, `&&`, `<@`)
-* full-text search (`tsvector @@ tsquery`)
+* `jsonb` (`@>`, `<@`, `?`, `?|`, `?&`). [Details here](https://www.postgresql.org/docs/9.4/functions-json.html).
+* arrays (`@>`, `&&`, `<@`).
+* full-text search (`tsvector @@ tsquery`).
 
-Typical fields: `jsonb`, `text[]`, `int[]`, `tsvector`.
+**Typical fields**: `jsonb`, `text[]`, `int[]`, `tsvector`.
 
-This index has a big overhead, query must justify usage of this index.
+This index has a big overhead, query must justify usage.
+
+### BRIN (Block Range Index)
+
+Best for: very large tables where values correlate with physical order (append-only/time-series).
+
+* Stores summaries per block range (min/max, etc.), so it is **tiny**.
+* Great for time-based columns when data is naturally clustered by time.
+* **Not** as precise as **B-tree**; it narrows down block ranges, then the heap must be scanned within those ranges.
+
+Typical fields: timestamps, increasing IDs, any column strongly correlated with insertion order.
+
+### GiST (Generalized Search Tree)
+
+**Best for**: geometric/range/nearest-neighbor and “overlap” semantics.
+
+* PostGIS geometries.
+* range types (int4range, tstzrange) with overlap queries.
+* KNN (k nearest neighbors) searches.
+
+**Typical fields**: spatial data, range types, “distance” queries.
+
+### SP-GiST (Space-Partitioned GiST)
+
+**Best for**: partitioning-based search structures, like tries.
+
+* Good for certain non-uniform distributions and some geometric / prefix use-cases.
