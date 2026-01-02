@@ -3,6 +3,7 @@
 <!-- TOC -->
 * [Indexes](#indexes)
   * [Tuning](#tuning)
+    * [Profiling](#profiling)
   * [Concepts](#concepts)
     * [Index is](#index-is)
     * [Partial indexes (WHERE)](#partial-indexes-where)
@@ -42,6 +43,17 @@
 
 ## Tuning
 
+### Profiling
+
+[The planner](https://www.interdb.jp/pg/pgsql03/01.html#314-planner-and-executor) may choose an _Index Scan_,
+_Index-only Scan_ or _Bitmap Index Scan_ to find candidate row locations, then fetch the table rows.
+
+Command `explain` helps to determine what scan type is used. For example:
+
+```sql
+TODO
+```
+
 ## Concepts
 
 ### Index is
@@ -55,9 +67,6 @@ Conceptually, an index stores:
   TID consists of block number + offset within the block. For example, `(42,9)` means that the item is the ninth
   element in the
   43rd 8KB block of the table or index (blocks are counted from 0).
-
-[The planner](https://www.interdb.jp/pg/pgsql03/01.html#314-planner-and-executor) may choose an _Index Scan_,
-_Index-only Scan_ or _Bitmap Index Scan_ to find candidate row locations, then fetch the table rows.
 
 **Indexes accelerate reads but add write costs!**
 

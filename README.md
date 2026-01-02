@@ -1,6 +1,6 @@
 # better-pg
 
-Cookbook for PG tuning.
+Cookbook for PG optimization.
 
 Sometimes a tuning is about a pure optimization, but sometimes about compromises.
 
