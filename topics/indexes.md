@@ -3,6 +3,11 @@
 <!-- @formatter:off -->
 <!-- TOC -->
 * [Indexes](#indexes)
+  * [Intro](#intro)
+  * [Optimization](#optimization)
+      * [Index-Only Scan](#index-only-scan)
+      * [Indexing Foreign keys](#indexing-foreign-keys)
+      * [Partial indexes](#partial-indexes)
   * [Concepts](#concepts)
     * [Index is](#index-is)
     * [Partial indexes (WHERE)](#partial-indexes-where)
@@ -38,11 +43,58 @@
       * [Disadvantages](#disadvantages-4)
       * [Typical fields](#typical-fields-4)
       * [Notes](#notes-2)
-  * [Optimization](#optimization)
-      * [Index-Only Scan](#index-only-scan)
-      * [Indexing Foreign keys](#indexing-foreign-keys)
-      * [Partial indexes](#partial-indexes)
 <!-- TOC -->
+
+## Intro
+
+This document contains information about index-related optimization with examples.
+
+Section [Concepts](#concepts) is being referenced from documentation to keep index related ideas in a single place.\
+Still, [Index is](#index-is) section is the good place to start from if the reader is not familiar with indexes.\
+Or the reader can just straight to the section Optimization. 
+
+Section [Optimization](#optimization) covers actual optimization tips.
+
+Section [Index types](#index-types) covers different indexes and the best places each index can be used.
+
+## Optimization
+
+[The Postgres Planner](https://www.interdb.jp/pg/pgsql03/01.html#314-planner-and-executor) may choose an _Index Scan_,
+_Index-Only Scan_ or _Bitmap Index Scan_ to find candidate row locations,
+then [Executor](https://www.interdb.jp/pg/pgsql03/01.html#314-planner-and-executor) fetch the table rows.
+
+Command `explain` helps to determine what scan type is used. Is index utilized or not. For example:
+
+```sql
+EXPLAIN
+SELECT id, name
+FROM books
+WHERE name = 'Computer systems: a programmer''s perspective';
+```
+
+![explain example](../assets/explain-example.png)
+
+#### Index-Only Scan
+
+The difference between _Index Scan_ and _Index-Only Scan_ is that during
+_Index Scan_ the Executor fetch additional data from table, but during
+_Index-Only Scan_ the Executor fetches data only from index.
+
+[Covering index](#covering-indexes-include) may be used to enforce _Index-Only Scan_.
+
+#### Indexing Foreign keys
+
+Index on _Foreign key_ can:
+
+* Improve performance of joins.
+* Improve performance when making changes to a referenced table.
+  DB ensures consistency of rules, therefore update/delete of a referenced table row can lead to usage of the index.
+
+#### Partial indexes
+
+This method can help to reduce index bloat and increase performance in rare cases.
+Pros & cons and Use Cases [are described here](#partial-indexes-where).
+
 
 ## Concepts
 
@@ -59,6 +111,7 @@ Conceptually, an index stores:
   43rd 8KB block of the table or index (blocks are counted from 0).
 
 **Indexes accelerate reads but add write costs!**
+Therefore they should be used on tables with high read/write ratio.
 
 * _INSERT_: add index entries.
 * _UPDATE_: may add new entries (and sometimes remove old ones logically).
@@ -99,12 +152,10 @@ Official documentation [is here](https://www.postgresql.org/docs/current/indexes
 
 ### Covering indexes (INCLUDE)
 
-* This reduces heap access and forces _Index-only scan_.
-* Increases storage consumed.
+**A covering index** is an index that contains all columns needed to satisfy a query (for filtering, joining or output), 
+so the _executor_ can return rows without reading the table (heap).
 
-Official documentation [is here](https://www.postgresql.org/docs/current/indexes-index-only-scans.html).
-
-This index:
+This covering index:
 
 ```sql
 CREATE INDEX ON users (email)
@@ -112,6 +163,25 @@ CREATE INDEX ON users (email)
 ```
 
 can help with a query like `SELECT email, phone FROM users WHERE email = 'email@gmail.com'`.
+Most probably the planner would use Index-Only Scan here.
+
+Pros:
+
+* Less heap reads.
+* Better cache efficiency. Covering index can remove hot-paths from cache entirely, therefore emptying space for other entries.
+* `INCLUDE` columns only uses space, but doesn't affect performance, since it's not a part of actual indexation.
+
+Cons:
+
+* Adding columns to index increases the index storage consumption.
+* Even higher write-operation overhead. Columns have to be processed not only for a table, but for an index.
+* Index-only scans are not guaranteed on tables with low read/write operations ratio.
+* Maintenance complexity. It's hard to tune without production data.
+
+Use case for this index is where win is measured based on: _space-consumption_ (the best scenario is small columns),
+and _read/write ratio_.
+
+Official documentation [is here](https://www.postgresql.org/docs/current/indexes-index-only-scans.html).
 
 ## Index types
 
@@ -303,41 +373,3 @@ A set of low to medium cardinality fields with unpredictable ordering.
 Answers to question "Can this row **possibly** match **all** these filters?"
 
 Documentation [is here](https://www.postgresql.org/docs/current/bloom.html).
-
-## Optimization
-
-[The Postgres Planner](https://www.interdb.jp/pg/pgsql03/01.html#314-planner-and-executor) may choose an _Index Scan_,
-_Index-Only Scan_ or _Bitmap Index Scan_ to find candidate row locations,
-then [Executor](https://www.interdb.jp/pg/pgsql03/01.html#314-planner-and-executor) fetch the table rows.
-
-Command `explain` helps to determine what scan type is used. Is index utilized or not. For example:
-
-```sql
-EXPLAIN
-SELECT id, name
-FROM books
-WHERE name = 'Computer systems: a programmer''s perspective';
-```
-
-![explain example](../assets/explain-example.png)
-
-#### Index-Only Scan
-
-The difference between _Index Scan_ and _Index-Only Scan_ is that during
-_Index Scan_ the Executor fetch additional data from table, but during
-_Index-Only Scan_ the Executor fetches data only from index.
-
-[Covering index](#covering-indexes-include) may be used to enforce _Index-Only Scan_.
-
-#### Indexing Foreign keys
-
-Index on _Foreign key_ can:
-
-* Improve performance of joins.
-* Improve performance when making changes to a referenced table.
-  DB ensures consistency of rules, therefore update/delete of a referenced table row can lead to usage of the index.
-
-#### Partial indexes
-
-This method can help to reduce index bloat and increase performance in rare cases.
-Pros & cons and Use Cases [are described here](#partial-indexes-where). 
