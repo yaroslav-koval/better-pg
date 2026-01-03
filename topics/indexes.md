@@ -1,45 +1,47 @@
 # Indexes
 
+<!-- @formatter:off -->
 <!-- TOC -->
-
 * [Indexes](#indexes)
-    * [Concepts](#concepts)
-        * [Index is](#index-is)
-        * [Partial indexes (WHERE)](#partial-indexes-where)
-        * [Covering indexes (INCLUDE)](#covering-indexes-include)
-    * [Index types](#index-types)
-        * [B-tree (default, most common).](#b-tree-default-most-common)
-            * [Best for](#best-for)
-            * [Advantages](#advantages)
-            * [Disadvantages](#disadvantages)
-            * [Typical fields](#typical-fields)
-            * [Notes](#notes)
-        * [HASH](#hash)
-            * [Best for](#best-for-1)
-            * [Advantages](#advantages-1)
-            * [Disadvantages](#disadvantages-1)
-            * [Typical fields](#typical-fields-1)
-        * [GIN (Generalized Inverted Index)](#gin-generalized-inverted-index)
-            * [Best for](#best-for-2)
-            * [Advantages](#advantages-2)
-            * [Disadvantages](#disadvantages-2)
-            * [Typical fields](#typical-fields-2)
-            * [Notes](#notes-1)
-        * [BRIN (Block Range Index)](#brin-block-range-index)
-            * [Best for](#best-for-3)
-            * [Advantages](#advantages-3)
-            * [Disadvantages](#disadvantages-3)
-            * [Typical fields](#typical-fields-3)
-        * [GiST (Generalized Search Tree)](#gist-generalized-search-tree)
-        * [SP-GiST (Space-Partitioned GiST)](#sp-gist-space-partitioned-gist)
-        * [Bloom index (bloom extension)](#bloom-index-bloom-extension)
-            * [Best for](#best-for-4)
-            * [Advantages](#advantages-4)
-            * [Disadvantages](#disadvantages-4)
-            * [Typical fields](#typical-fields-4)
-            * [Notes](#notes-2)
-    * [Optimization](#optimization)
-
+  * [Concepts](#concepts)
+    * [Index is](#index-is)
+    * [Partial indexes (WHERE)](#partial-indexes-where)
+    * [Covering indexes (INCLUDE)](#covering-indexes-include)
+  * [Index types](#index-types)
+    * [B-tree (default, most common).](#b-tree-default-most-common)
+      * [Best for](#best-for)
+      * [Advantages](#advantages)
+      * [Disadvantages](#disadvantages)
+      * [Typical fields](#typical-fields)
+      * [Notes](#notes)
+    * [HASH](#hash)
+      * [Best for](#best-for-1)
+      * [Advantages](#advantages-1)
+      * [Disadvantages](#disadvantages-1)
+      * [Typical fields](#typical-fields-1)
+    * [GIN (Generalized Inverted Index)](#gin-generalized-inverted-index)
+      * [Best for](#best-for-2)
+      * [Advantages](#advantages-2)
+      * [Disadvantages](#disadvantages-2)
+      * [Typical fields](#typical-fields-2)
+      * [Notes](#notes-1)
+    * [BRIN (Block Range Index)](#brin-block-range-index)
+      * [Best for](#best-for-3)
+      * [Advantages](#advantages-3)
+      * [Disadvantages](#disadvantages-3)
+      * [Typical fields](#typical-fields-3)
+    * [GiST (Generalized Search Tree)](#gist-generalized-search-tree)
+    * [SP-GiST (Space-Partitioned GiST)](#sp-gist-space-partitioned-gist)
+    * [Bloom index (bloom extension)](#bloom-index-bloom-extension)
+      * [Best for](#best-for-4)
+      * [Advantages](#advantages-4)
+      * [Disadvantages](#disadvantages-4)
+      * [Typical fields](#typical-fields-4)
+      * [Notes](#notes-2)
+  * [Optimization](#optimization)
+      * [Index-Only Scan](#index-only-scan)
+      * [Indexing Foreign keys](#indexing-foreign-keys)
+      * [Partial indexes](#partial-indexes)
 <!-- TOC -->
 
 ## Concepts
@@ -65,22 +67,42 @@ Conceptually, an index stores:
 
 ### Partial indexes (WHERE)
 
-* Index only some part of data based on filter.
-* Reduces storage consumed by an index.
-
-Documentation [is here](https://www.postgresql.org/docs/current/indexes-partial.html).
+A partial index is an index built on the subset of table rows that satisfy a `WHERE` predicate defined at index creation time.
 
 ```sql
 CREATE INDEX ON orders (created_at)
-  WHERE status = 'open';
+  WHERE status != 'open';
 ```
+
+Pros:
+
+* Smaller disk and cache usage, less page reads.
+* Improves plan quality.
+* Lower write-query overhead.
+
+Cons:
+
+* Index can't be used unless predicate statement if fulfilled.
+* Changes in application data can lead to reduced effectiveness over time (if predicate is volatile).
+  For example, now most of the fields use status `open`, but not `initiated` or `closed`.
+* Multiple partial indexes may increase planning complexity, therefore decrease performance.
+
+Use cases:
+
+* Status. If most of the records are marked as `finished`. In such a case index can use `WHERE status != finished` 
+  or `WHERE status = open`.
+* Soft deletes. Mark deleted record as `deleted_at = NOW()`. Index may use `WHERE deleted_at IS NULL`.
+* Sparse columns. When column have a lot of nulls it's a great opportunity to reduce index disk consumption. Like, `WHERE email IS NOT NULL`.
+* Uniqueness only for active rows. For example, _unique_ usernames among _active_ users.
+
+Official documentation [is here](https://www.postgresql.org/docs/current/indexes-partial.html).
 
 ### Covering indexes (INCLUDE)
 
 * This reduces heap access and forces _Index-only scan_.
 * Increases storage consumed.
 
-Documentation [is here](https://www.postgresql.org/docs/current/indexes-index-only-scans.html).
+Official documentation [is here](https://www.postgresql.org/docs/current/indexes-index-only-scans.html).
 
 This index:
 
@@ -304,6 +326,7 @@ WHERE name = 'Computer systems: a programmer''s perspective';
 The difference between _Index Scan_ and _Index-Only Scan_ is that during
 _Index Scan_ the Executor fetch additional data from table, but during
 _Index-Only Scan_ the Executor fetches data only from index.
+
 [Covering index](#covering-indexes-include) may be used to enforce _Index-Only Scan_.
 
 #### Indexing Foreign keys
@@ -311,7 +334,10 @@ _Index-Only Scan_ the Executor fetches data only from index.
 Index on _Foreign key_ can:
 
 * Improve performance of joins.
-* Improve performance when making changes to a parent table.
-  DB ensures consistency of rules, therefore update/delete of parent table row can lead to usage of the index.
+* Improve performance when making changes to a referenced table.
+  DB ensures consistency of rules, therefore update/delete of a referenced table row can lead to usage of the index.
 
-TODO write usecases and downsides.
+#### Partial indexes
+
+This method can help to reduce index bloat and increase performance in rare cases.
+Pros & cons and Use Cases [are described here](#partial-indexes-where). 
