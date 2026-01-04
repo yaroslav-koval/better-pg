@@ -83,7 +83,12 @@ The difference between _Index Scan_ and _Index-Only Scan_ is that during
 _Index Scan_ the Executor fetch additional data from table, but during
 _Index-Only Scan_ the Executor fetches data only from index.
 
-[Covering index](#covering-indexes-include) may be used to enforce _Index-Only Scan_.
+[Covering index](#covering-indexes-include) may be used to enforce _Index-Only Scan_:
+
+```sql
+CREATE INDEX ON tab (col1)
+  INCLUDE (col2);
+```
 
 ### Indexing Foreign keys
 
@@ -96,10 +101,22 @@ Index on _Foreign key_ can:
 ### Partial indexes
 
 This method can help to reduce index bloat and increase performance in rare cases.
+
+Create an index using
+
+```sql
+CREATE INDEX ON tab (col)
+  WHERE <predicate>;
+```
+
 Pros & cons and use cases [are described here](#partial-indexes-where).
 
 
 ### Clusterization
+
+A table data can be rewritten and clustered accordingly to index needs:
+
+`CLUSTER table USING index`
 
 Pros & cons and use cases [are described here](#clusterization-1).
 
