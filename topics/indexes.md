@@ -114,7 +114,7 @@ Pros & cons and use cases [are described here](#partial-indexes-where).
 
 ### Clusterization
 
-A table data can be rewritten and clustered accordingly to index needs:
+From time to time a table data can be rewritten and clustered accordingly to index needs:
 
 `CLUSTER table USING index`
 
