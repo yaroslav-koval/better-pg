@@ -334,6 +334,8 @@ Use cases:
 
 There's an optimization related to [table fillfactor](uncategorized.md#table-fillfactor).
 
+Official documentation [is here](https://www.postgresql.org/docs/current/sql-createindex.html#INDEX-RELOPTION-FILLFACTOR).
+
 ### Reindex
 
 TODO
