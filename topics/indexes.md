@@ -23,7 +23,6 @@
       * [Advantages](#advantages)
       * [Disadvantages](#disadvantages)
       * [Typical fields](#typical-fields)
-      * [Notes](#notes)
     * [HASH](#hash)
       * [Best for](#best-for-1)
       * [Advantages](#advantages-1)
@@ -34,7 +33,7 @@
       * [Advantages](#advantages-2)
       * [Disadvantages](#disadvantages-2)
       * [Typical fields](#typical-fields-2)
-      * [Notes](#notes-1)
+      * [Notes](#notes)
     * [BRIN (Block Range Index)](#brin-block-range-index)
       * [Best for](#best-for-3)
       * [Advantages](#advantages-3)
@@ -47,7 +46,7 @@
       * [Advantages](#advantages-4)
       * [Disadvantages](#disadvantages-4)
       * [Typical fields](#typical-fields-4)
-      * [Notes](#notes-2)
+      * [Notes](#notes-1)
 <!-- TOC -->
 
 ## Intro
@@ -92,6 +91,9 @@ CREATE INDEX ON tab (col1)
   INCLUDE (col2);
 ```
 
+Use case for **covering indexes** is where the _win_ is measured based on: _space-consumption_ (the best scenario is small columns),
+and _read/write ratio_.
+
 ### Indexing Foreign keys
 
 Index on _Foreign key_ can:
@@ -103,6 +105,16 @@ Index on _Foreign key_ can:
 ### Partial indexes
 
 This method can help to reduce index bloat and increase performance in rare cases.
+
+Use cases:
+
+* Fields where most of the values (let's say 25%) can be excluded, like gender or nationality.
+* Status. If most of the records are marked as `finished`. In such a case index can use `WHERE status != finished`
+  or `WHERE status = open`.
+* Soft deletes. Mark deleted record as `deleted_at = NOW()`. Index may use `WHERE deleted_at IS NULL`.
+* Sparse columns. When column have a lot of nulls it's a great opportunity to reduce index disk consumption. Like, `WHERE email IS NOT NULL`.
+* Uniqueness only for active rows. For example, _unique_ usernames among _active_ users.
+
 
 Create an index using
 
@@ -116,9 +128,16 @@ Pros & cons and use cases [are described here](#partial-indexes-where).
 
 ### Clusterization
 
-From time to time a table data can be rewritten and clustered accordingly to index needs:
+From time to time data inside a table can be rewritten and clustered accordingly to index needs:
 
 `CLUSTER table USING index`
+
+Use cases:
+
+* Time-based access, e.g. `WHERE created_at < CURRENT_DATE - 7`.
+* Multi-tenant table with field like `tenant_id`.
+* OLAP (Online Analytical Processing) where batch processing can suffocate from high I/O.
+* Improving [BRIN](#brin-block-range-index) effectiveness.
 
 Pros & cons and use cases [are described here](#clusterization-1).
 
@@ -139,6 +158,17 @@ REINDEX INDEX idx;
 ```
 
 Details [are described here](#index-fillfactor).
+
+### Multicolumn indexes
+
+Use cases:
+
+* Columns are frequently used _together_ for filtering/ordering.
+* There are different queries that can utilize that index fully or partially.
+* Index on foreign keys where join has `AND` statement.
+* `INCLUDE` additional column to create a [covering index](#covering-indexes-include), when it's justified.
+
+Details [are described here](#multicolumn-index).
 
 ## Concepts
 
@@ -184,14 +214,6 @@ Cons:
   For example, now most of the fields use status `open`, but not `initiated` or `closed`.
 * Multiple partial indexes may increase planning complexity, therefore decrease performance.
 
-Use cases:
-
-* Status. If most of the records are marked as `finished`. In such a case index can use `WHERE status != finished` 
-  or `WHERE status = open`.
-* Soft deletes. Mark deleted record as `deleted_at = NOW()`. Index may use `WHERE deleted_at IS NULL`.
-* Sparse columns. When column have a lot of nulls it's a great opportunity to reduce index disk consumption. Like, `WHERE email IS NOT NULL`.
-* Uniqueness only for active rows. For example, _unique_ usernames among _active_ users.
-
 Official documentation [is here](https://www.postgresql.org/docs/current/indexes-partial.html).
 
 ### Covering indexes (INCLUDE)
@@ -221,9 +243,6 @@ Cons:
 * Even higher write-operation overhead. Columns have to be processed not only for a table, but for an index.
 * Index-only scans are not guaranteed on tables with low read/write operations ratio.
 * Maintenance complexity. It's hard to tune without production data.
-
-Use case for this index is where win is measured based on: _space-consumption_ (the best scenario is small columns),
-and _read/write ratio_.
 
 Official documentation [is here](https://www.postgresql.org/docs/current/indexes-index-only-scans.html).
 
@@ -261,13 +280,6 @@ Cons:
 * Not self-maintaining. `CLUSTER` command adds operational overhead: 
   proper frequency, time, factors for execution have to be selected.
 * Heavy operation. It leads to full table rewrite, hence the bigger the table the more I/O needed.
-
-Use cases:
-
-* Time-based access, e.g. `WHERE created_at < CURRENT_DATE - 7`.
-* Multi-tenant table with field like `tenant_id`.
-* OLAP (Online Analytical Processing) where batch processing can suffocate from high I/O.
-* Improving [BRIN](#brin-block-range-index) effectiveness.
 
 Analyzation:
 
@@ -336,6 +348,57 @@ There's an optimization related to [table fillfactor](uncategorized.md#table-fil
 
 Official documentation [is here](https://www.postgresql.org/docs/current/sql-createindex.html#INDEX-RELOPTION-FILLFACTOR).
 
+### Multicolumn index
+
+[Multicolumn index](https://www.postgresql.org/docs/current/indexes-multicolumn.html#INDEXES-MULTICOLUMN) is the Postgres
+mechanism that allows to use several columns in a single index.
+
+Indexes [B-tree](#b-tree-default-most-common), [GIN](#gin-generalized-inverted-index), [BRIN](#brin-block-range-index),
+[GIST](#gist-generalized-search-tree) can enforce `multicolumn index` system:
+
+```sql
+CREATE INDEX idx ON tabl USING GIN (col1, col2);
+```
+
+Multicolumn index provides **_left-to-right matching rules_**. Explanation by the example:
+
+The table:\
+`CREATE TABLE my_table(col1 INT, col2 INT, col3 INT)`
+
+The [B-tree](#b-tree-default-most-common) index that uses different columns:\
+`CREATE INDEX my_table_idx on my_table(col1, col2, col3);`
+
+Then next queries can use index:
+
+```sql
+SELECT FROM my_table WHERE col1 < 5;
+SELECT FROM my_table WHERE col1 < 5 AND col2 > 10;
+SELECT FROM my_table WHERE col1 < 5 AND col2 > 10 AND col3 <= 25;
+```
+
+But these queries can **not**:
+
+```sql
+SELECT FROM my_table WHERE col2 < 10;
+SELECT FROM my_table WHERE col3 <= 25;
+SELECT FROM my_table WHERE col2 < 10 AND col3 <= 25;
+```
+
+Pros:
+
+* Increased performance for filtering/ordering when several columns are used (compared to single-column indexes).
+* One index can be used for multiple queries.
+* Reduced result set amount compared to single-column indexes.
+  In a case with single-column index Postgres fetches data from heap several times.
+* Potentially good for [COVERING](#covering-indexes-include)
+* Increases chance for **Index-Only Scan** if only index columns are selected.
+
+Cons:
+
+* Column-order is important and must be chosen carefully.
+* Larger index size. It's inefficient if column(s) are not used in queries.
+* More write-operation costs. Need to index more columns for a single table row.
+
 ### Reindex
 
 TODO
@@ -354,7 +417,6 @@ General-purpose indexing: equality, range queries, and sorting (=, <, <=, >, >=,
 
 * Default and most well-optimized index type in PostgreSQL
 * Supports ordering and range operations (can satisfy ORDER BY and range filters).
-* Supports multi-column indexes with _left-to-right matching rules_ (explained below).
 * This is default index for PRIMARY KEY and UNIQUE.
 
 #### Disadvantages
@@ -367,32 +429,6 @@ General-purpose indexing: equality, range queries, and sorting (=, <, <=, >, >=,
 #### Typical fields
 
 Integers, timestamps, UUIDs, numeric, short text.
-
-#### Notes
-
-**_Left-to-right matching rules:_**
-
-If we have the table:\
-`CREATE TABLE my_table(col1 INT, col2 INT, col3 INT)`
-
-and we have the next index:\
-`CREATE INDEX my_table_idx on my_table(col1, col2, col3);`
-
-Then next queries can use index:
-
-```sql
-SELECT FROM my_table WHERE col1 < 5;
-SELECT FROM my_table WHERE col1 < 5 AND col2 > 10;
-SELECT FROM my_table WHERE col1 < 5 AND col2 > 10 AND col3 <= 25;
-```
-
-But these queries can **not**:
-
-```sql
-SELECT FROM my_table WHERE col2 < 10;
-SELECT FROM my_table WHERE col3 <= 25;
-SELECT FROM my_table WHERE col2 < 10 AND col3 <= 25;
-```
 
 ### HASH
 
@@ -417,7 +453,7 @@ Equality (`=`) only.
 * No `ORDER BY` support.
 * **B-tree** usually performs **similarly** for equality while also supporting more operators.
 * Historically less mature and less used than **B-tree**; fewer real-world tuning examples.
-* No multi-column support.
+* No multicolumn support.
 
 #### Typical fields
 
